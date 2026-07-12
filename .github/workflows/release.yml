@@ -1,0 +1,56 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build and publish release
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate extension files
+        run: |
+          node --check content.js
+          python -m json.tool manifest.json > /dev/null
+
+      - name: Package extension
+        env:
+          TAG_NAME: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+
+          package_name="ohmyhattrick-${TAG_NAME}.zip"
+          package_dir="dist/package"
+          mkdir -p "$package_dir"
+
+          git ls-files \
+            | grep -v '^\.github/' \
+            | while IFS= read -r file; do
+                mkdir -p "$package_dir/$(dirname "$file")"
+                cp "$file" "$package_dir/$file"
+              done
+
+          (
+            cd "$package_dir"
+            zip -r "../$package_name" .
+          )
+
+          echo "package_path=dist/$package_name" >> "$GITHUB_ENV"
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG_NAME: ${{ github.ref_name }}
+        run: |
+          gh release create "$TAG_NAME" "$package_path" \
+            --title "$TAG_NAME" \
+            --generate-notes
