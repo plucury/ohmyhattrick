@@ -3,8 +3,10 @@
 }
 
 .omh-list-wrapper {
+  display: block !important;
   margin: 10px 0 16px;
   max-width: 100%;
+  visibility: visible !important;
 }
 
 .omh-player-list {

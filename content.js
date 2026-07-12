@@ -2,6 +2,7 @@
   "use strict";
 
   const PLAYER_SELECTOR = ".playerList .teamphoto-player";
+  const DEBUG = /(?:[?&]omhDebug=1\b|#.*\bomhDebug=1\b)/.test(window.location.href);
   const SKILL_ROW_SUFFIXES = [
     ["Keeper"],
     ["Defender"],
@@ -11,6 +12,12 @@
     ["Scorer", "Scoring"],
     ["Kicker"]
   ];
+
+  function debugLog(...args) {
+    if (DEBUG) {
+      console.debug("[Oh My Hattrick]", ...args);
+    }
+  }
 
   function cleanText(value) {
     return (value || "").replace(/\u00a0/g, " ").replace(/\s+/g, " ").trim();
@@ -750,6 +757,7 @@
   function buildPlayerList(playerData) {
     const wrapper = document.createElement("div");
     wrapper.className = "omh-list-wrapper";
+    wrapper.dataset.omhWrapper = "true";
 
     const list = document.createElement("div");
     list.className = "omh-player-list";
@@ -780,36 +788,163 @@
     return wrapper;
   }
 
+  function playerLists() {
+    return Array.from(document.querySelectorAll(".playerList"));
+  }
+
+  function playerNodesFor(list) {
+    return Array.from(list?.querySelectorAll(".teamphoto-player") || []);
+  }
+
+  function playerListDebugInfo(lists = playerLists()) {
+    return lists.map((list, index) => ({
+      index,
+      enhanced: list.dataset.omhEnhanced === "true",
+      observed: list.dataset.omhObserved === "true",
+      players: playerNodesFor(list).length,
+      classes: list.className
+    }));
+  }
+
+  function findPlayerList() {
+    const lists = playerLists();
+    return (
+      lists.find((list) => list.dataset.omhEnhanced !== "true" && playerNodesFor(list).length) ||
+      lists.find((list) => playerNodesFor(list).length) ||
+      lists.find((list) => list.dataset.omhEnhanced !== "true") ||
+      lists[0] ||
+      null
+    );
+  }
+
+  function hasWrapperFor(list) {
+    return Boolean(
+      list?.previousElementSibling?.dataset.omhWrapper === "true" ||
+        list?.parentElement?.querySelector(":scope > .omh-list-wrapper[data-omh-wrapper='true']")
+    );
+  }
+
   function enhanceAll() {
-    const list = document.querySelector(".playerList");
-    if (!list || list.dataset.omhEnhanced === "true") {
-      return;
+    const list = findPlayerList();
+    if (!list) {
+      debugLog("enhance skipped: .playerList not found", {
+        readyState: document.readyState,
+        url: window.location.href
+      });
+      return false;
+    }
+    if (list.dataset.omhEnhanced === "true") {
+      if (!hasWrapperFor(list)) {
+        debugLog("enhanced list lost wrapper; rebuilding");
+        delete list.dataset.omhEnhanced;
+      } else {
+        debugLog("enhance skipped: already enhanced");
+        return false;
+      }
     }
 
-    const playerData = Array.from(document.querySelectorAll(PLAYER_SELECTOR)).map(collectPlayerData).filter(Boolean);
-    if (!playerData.length || playerData.length !== document.querySelectorAll(PLAYER_SELECTOR).length) {
-      return;
+    const playerNodes = playerNodesFor(list);
+    const playerData = playerNodes.map(collectPlayerData).filter(Boolean);
+    if (!playerData.length || playerData.length !== playerNodes.length) {
+      debugLog("enhance skipped: player data incomplete", {
+        playerNodes: playerNodes.length,
+        playerData: playerData.length,
+        lists: playerListDebugInfo()
+      });
+      return false;
     }
 
-    list.parentNode.insertBefore(buildPlayerList(playerData), list);
+    const wrapper = buildPlayerList(playerData);
+    list.parentNode.insertBefore(wrapper, list);
     list.classList.add("omh-source-list");
     list.dataset.omhEnhanced = "true";
+    debugLog("enhance complete", {
+      players: playerData.length,
+      lists: playerLists().length,
+      wrapperDisplay: window.getComputedStyle(wrapper).display,
+      wrapperVisibility: window.getComputedStyle(wrapper).visibility,
+      sourceDisplay: window.getComputedStyle(list).display
+    });
+    return true;
   }
 
   function observePlayerList() {
-    const list = document.querySelector(".playerList");
-    if (!list) {
+    const list = findPlayerList();
+    if (!list || list.dataset.omhObserved === "true") {
+      debugLog("list observer skipped", {
+        hasList: Boolean(list),
+        observed: list?.dataset.omhObserved === "true"
+      });
       return;
     }
 
     let timer = 0;
     const observer = new MutationObserver(() => {
+      debugLog("player list mutated");
       window.clearTimeout(timer);
-      timer = window.setTimeout(enhanceAll, 100);
+      timer = window.setTimeout(() => {
+        if (!hasWrapperFor(list)) {
+          delete list.dataset.omhEnhanced;
+          enhanceAll();
+        }
+      }, 100);
     });
     observer.observe(list, { childList: true, subtree: true });
+    list.dataset.omhObserved = "true";
+    debugLog("list observer attached");
   }
 
-  enhanceAll();
-  observePlayerList();
+  function start() {
+    debugLog("start", {
+      readyState: document.readyState,
+      url: window.location.href,
+      hasList: Boolean(findPlayerList()),
+      lists: playerLists().length,
+      listDetails: playerListDebugInfo(),
+      players: document.querySelectorAll(PLAYER_SELECTOR).length
+    });
+
+    let timer = 0;
+    let observer = null;
+    let enhanced = false;
+
+    function disconnectDocumentObserver() {
+      if (observer) {
+        observer.disconnect();
+        observer = null;
+        debugLog("document observer disconnected");
+      }
+    }
+
+    function attemptEnhance(reason) {
+      if (enhanced) {
+        return;
+      }
+      debugLog("attempt enhance", reason);
+      if (enhanceAll()) {
+        enhanced = true;
+        observePlayerList();
+        disconnectDocumentObserver();
+      }
+    }
+
+    observer = new MutationObserver(() => {
+      debugLog("document mutated");
+      window.clearTimeout(timer);
+      timer = window.setTimeout(() => {
+        attemptEnhance("document mutation");
+      }, 100);
+    });
+
+    observer.observe(document.documentElement, { childList: true, subtree: true });
+    debugLog("document observer attached");
+
+    attemptEnhance("initial");
+    window.addEventListener("load", () => attemptEnhance("window load"), { once: true });
+    [250, 1000, 2500, 5000].forEach((delay) => {
+      window.setTimeout(() => attemptEnhance(`delayed retry ${delay}ms`), delay);
+    });
+  }
+
+  start();
 })();
