@@ -1,0 +1,29 @@
+# Release and build artifacts
+dist/
+*.zip
+*.crx
+*.pem
+
+# Dependencies and caches
+node_modules/
+.cache/
+.parcel-cache/
+
+# Local environment files
+.env
+.env.*
+
+# OS and editor files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*

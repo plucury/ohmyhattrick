@@ -12,3 +12,7 @@ The extension currently enhances Hattrick senior and youth player list pages
 under `https://*.hattrick.org/Club/Players*` by replacing the visual player card
 list with a compact table built from the page's current language labels. The
 compact list can also export the visible player data to CSV.
+
+## Privacy
+
+See [PRIVACY.md](PRIVACY.md).
