@@ -70,11 +70,15 @@
   position: static;
 }
 
-.omh-facts-row,
-.omh-skills-row {
+.omh-facts-row {
   align-items: center;
   line-height: 1.45;
   width: 100%;
+}
+
+.omh-skills-row {
+  align-items: center;
+  line-height: 1.45;
 }
 
 .omh-rating-row {
@@ -94,7 +98,6 @@
 }
 
 .omh-skills-row {
-  background: #fbfbfb;
   display: flex;
   flex-wrap: wrap;
   gap: 6px 8px;
