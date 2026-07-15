@@ -1,7 +1,11 @@
 # Oh My Hattrick
 Oh My Hattrick is a free and open-source enhancement suite for Hattrick.
 
-## Local installation
+## Installation
+
+Install [Oh My Hattrick from the Chrome Web Store](https://chromewebstore.google.com/detail/oh-my-hattrick/dkmhphbahollijjdhccpkemhckoiefle).
+
+### Local installation
 
 1. Open `chrome://extensions` in Chrome.
 2. Enable **Developer mode**.
