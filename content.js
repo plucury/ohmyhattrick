@@ -3,6 +3,16 @@
 
   const PLAYER_SELECTOR = ".playerList .teamphoto-player";
   const DEBUG = /(?:[?&]omhDebug=1\b|#.*\bomhDebug=1\b)/.test(window.location.href);
+  const TAG_STORAGE_KEY = "ohMyHattrick.playerTags.v1";
+  const PLAYER_TAGS = ["Core", "Develop", "Rotation", "Sell", "Watch", "Frozen"];
+  const LEGACY_TAGS = {
+    "核心": "Core",
+    "培养": "Develop",
+    "轮换": "Rotation",
+    "出售": "Sell",
+    "观察": "Watch",
+    "冻结": "Frozen"
+  };
   const SKILL_ROW_SUFFIXES = [
     ["Keeper"],
     ["Defender"],
@@ -12,6 +22,7 @@
     ["Scorer", "Scoring"],
     ["Kicker"]
   ];
+  let playerTags = {};
 
   function debugLog(...args) {
     if (DEBUG) {
@@ -553,6 +564,51 @@
     return block;
   }
 
+  function createTagControl(player) {
+    return createTagControlForKey(playerStorageId(player));
+  }
+
+  function createTagControlForKey(key) {
+    const select = document.createElement("select");
+    select.className = "omh-tag-select";
+    select.title = tagLabel();
+    select.setAttribute("aria-label", tagLabel());
+
+    const emptyOption = document.createElement("option");
+    emptyOption.value = "";
+    emptyOption.textContent = tagLabel();
+    select.appendChild(emptyOption);
+
+    PLAYER_TAGS.forEach((tag) => {
+      const option = document.createElement("option");
+      option.value = tag;
+      option.textContent = tag;
+      select.appendChild(option);
+    });
+
+    select.value = playerTagForKey(key);
+    select.dataset.tag = select.value;
+    select.addEventListener("change", () => {
+      setPlayerTagForKey(key, select.value);
+      select.dataset.tag = select.value;
+    });
+
+    return select;
+  }
+
+  function createPlayerActions(data) {
+    const actions = document.createElement("div");
+    actions.className = "omh-player-actions";
+
+    const rating = createLastRatingBlock(data.player, data.originalData);
+    if (rating) {
+      actions.appendChild(rating);
+    }
+    actions.appendChild(createTagControl(data.player));
+
+    return actions;
+  }
+
   function createFactsRow(infoRows) {
     const row = document.createElement("div");
     row.className = "omh-facts-row";
@@ -646,6 +702,133 @@
     return match ? match[1] : "";
   }
 
+  function storageIdFromHref(href) {
+    const match = href.match(/[?&](YouthPlayerID|PlayerID)=(\d+)/i);
+    if (!match) {
+      return "";
+    }
+    return `${match[1].toLowerCase()}:${match[2]}`;
+  }
+
+  function playerStorageId(player) {
+    return storageIdFromHref(player.querySelector(":scope > h3 a")?.getAttribute("href") || "");
+  }
+
+  function currentPlayerStorageId() {
+    const canonical = document.querySelector('link[rel="canonical"]')?.getAttribute("href") || "";
+    const formAction = document.querySelector("form")?.getAttribute("action") || "";
+    const playerLink = document
+      .querySelector('a[href*="PlayerID="], a[href*="YouthPlayerID="]')
+      ?.getAttribute("href");
+    return [window.location.href, canonical, formAction, playerLink || ""].map(storageIdFromHref).find(Boolean) || "";
+  }
+
+  function normalizePlayerTags(value) {
+    if (!value || typeof value !== "object" || Array.isArray(value)) {
+      return {};
+    }
+
+    return Object.fromEntries(
+      Object.entries(value)
+        .map(([key, tag]) => [key, LEGACY_TAGS[tag] || tag])
+        .filter(([key, tag]) => key && PLAYER_TAGS.includes(tag))
+    );
+  }
+
+  function readLegacyPlayerTags() {
+    try {
+      return normalizePlayerTags(JSON.parse(localStorage.getItem(TAG_STORAGE_KEY) || "{}"));
+    } catch (error) {
+      debugLog("read legacy tags failed", error);
+      return {};
+    }
+  }
+
+  function extensionStorage() {
+    return typeof chrome !== "undefined" ? chrome.storage?.local : null;
+  }
+
+  function loadPlayerTags() {
+    const storage = extensionStorage();
+    if (!storage) {
+      playerTags = readLegacyPlayerTags();
+      return Promise.resolve();
+    }
+
+    return new Promise((resolve) => {
+      storage.get(TAG_STORAGE_KEY, (result) => {
+        const error = chrome.runtime?.lastError;
+        if (error) {
+          debugLog("read extension tags failed", error);
+        }
+
+        const storedTags = normalizePlayerTags(result?.[TAG_STORAGE_KEY]);
+        const legacyTags = readLegacyPlayerTags();
+        playerTags = { ...legacyTags, ...storedTags };
+
+        if (Object.keys(legacyTags).length) {
+          writePlayerTags();
+          try {
+            localStorage.removeItem(TAG_STORAGE_KEY);
+          } catch (removeError) {
+            debugLog("remove legacy tags failed", removeError);
+          }
+        }
+
+        resolve();
+      });
+    });
+  }
+
+  function writePlayerTags() {
+    const storage = extensionStorage();
+    if (storage) {
+      storage.set({ [TAG_STORAGE_KEY]: playerTags }, () => {
+        const error = chrome.runtime?.lastError;
+        if (error) {
+          debugLog("write extension tags failed", error);
+        }
+      });
+      return;
+    }
+
+    try {
+      localStorage.setItem(TAG_STORAGE_KEY, JSON.stringify(playerTags));
+    } catch (error) {
+      debugLog("write fallback tags failed", error);
+    }
+  }
+
+  function playerTag(player) {
+    return playerTagForKey(playerStorageId(player));
+  }
+
+  function playerTagForKey(key) {
+    const tag = key ? playerTags[key] : "";
+    return PLAYER_TAGS.includes(tag) ? tag : "";
+  }
+
+  function setPlayerTag(player, tag) {
+    setPlayerTagForKey(playerStorageId(player), tag);
+  }
+
+  function setPlayerTagForKey(key, tag) {
+    if (!key) {
+      return;
+    }
+
+    if (PLAYER_TAGS.includes(tag)) {
+      playerTags[key] = tag;
+    } else {
+      delete playerTags[key];
+    }
+    writePlayerTags();
+  }
+
+  function tagLabel() {
+    return "Tag";
+  }
+
   function uniqueColumn(columns, column) {
     if (!column.label || columns.some((existing) => existing.key === column.key)) {
       return;
@@ -664,9 +847,11 @@
   }
 
   function csvLabel() {
-    const pageDownloadLink =
-      document.querySelector("#playersTable a.download") || document.querySelector(".pageOverlayContent a.download");
-    return cleanText(pageDownloadLink?.textContent || pageDownloadLink?.getAttribute("title") || "") || "CSV";
+    return "Download CSV";
+  }
+
+  function copyJsonLabel() {
+    return "Copy JSON";
   }
 
   function csvCell(value) {
@@ -694,11 +879,12 @@
     window.setTimeout(() => URL.revokeObjectURL(url), 0);
   }
 
-  function exportPlayersCsv(playerData) {
-    const rows = playerData.map((data) => {
+  function playerExportRows(playerData) {
+    return playerData.map((data) => {
       const values = {
         name: playerName(data.player),
-        playerId: playerId(data.player)
+        playerId: playerId(data.player),
+        tag: playerTag(data.player)
       };
       const facts = createPlayerFactEntries(data.infoRows);
       const skills = createPlayerSkillEntries(data.skillRows);
@@ -716,10 +902,14 @@
 
       return { values, facts, skills };
     });
+  }
 
+  function exportPlayersCsv(playerData) {
+    const rows = playerExportRows(playerData);
     const columns = [];
     uniqueColumn(columns, { key: "name", label: labelFromSortOption("Firstname") || "Name" });
     uniqueColumn(columns, { key: "playerId", label: labelFromSortOption("PlayerId") || "Player ID" });
+    uniqueColumn(columns, { key: "tag", label: tagLabel() });
     rows.forEach((row) => {
       row.facts.forEach((fact) => uniqueColumn(columns, { key: `fact:${fact.label}`, label: fact.label }));
     });
@@ -737,6 +927,59 @@
     downloadCsv(csvRows.join("\r\n"));
   }
 
+  function exportPlayersJson(playerData) {
+    return playerExportRows(playerData).map((row) => {
+      const factValues = {};
+      const skillValues = {};
+
+      row.facts.forEach((fact) => {
+        factValues[fact.label] = fact.value;
+      });
+      row.skills.forEach((skill) => {
+        skillValues[skill.label] = {
+          value: skill.value,
+          level: skill.level,
+          title: skill.title
+        };
+      });
+
+      return {
+        name: row.values.name,
+        playerId: row.values.playerId,
+        tag: row.values.tag,
+        facts: factValues,
+        skills: skillValues,
+        lastMatch: {
+          rating: row.values.rating,
+          date: row.values.matchDate,
+          position: row.values.position
+        }
+      };
+    });
+  }
+
+  async function copyPlayersJson(playerData, button) {
+    const originalText = button.textContent;
+    const json = JSON.stringify(exportPlayersJson(playerData), null, 2);
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(json);
+    } else {
+      const input = document.createElement("textarea");
+      input.value = json;
+      input.setAttribute("readonly", "");
+      input.style.position = "fixed";
+      input.style.left = "-9999px";
+      document.body.appendChild(input);
+      input.select();
+      document.execCommand("copy");
+      input.remove();
+    }
+    button.textContent = `✓ ${originalText}`;
+    window.setTimeout(() => {
+      button.textContent = originalText;
+    }, 1200);
+  }
+
   function createToolbar(playerData) {
     const toolbar = document.createElement("div");
     toolbar.className = "omh-toolbar";
@@ -744,13 +987,27 @@
     const exportButton = document.createElement("button");
     const label = csvLabel();
     exportButton.type = "button";
-    exportButton.className = "omh-export-button";
+    exportButton.className = "omh-toolbar-button omh-export-button";
     exportButton.textContent = label;
     exportButton.title = label;
     exportButton.setAttribute("aria-label", label);
     exportButton.addEventListener("click", () => exportPlayersCsv(playerData));
 
-    toolbar.appendChild(exportButton);
+    const copyButton = document.createElement("button");
+    const copyLabel = copyJsonLabel();
+    copyButton.type = "button";
+    copyButton.className = "omh-toolbar-button omh-copy-button";
+    copyButton.textContent = copyLabel;
+    copyButton.title = copyLabel;
+    copyButton.setAttribute("aria-label", copyLabel);
+    copyButton.addEventListener("click", () => {
+      copyPlayersJson(playerData, copyButton).catch((error) => {
+        debugLog("copy json failed", error);
+        copyButton.textContent = copyLabel;
+      });
+    });
+
+    toolbar.append(exportButton, copyButton);
     return toolbar;
   }
 
@@ -770,10 +1027,7 @@
       top.className = "omh-player-top";
 
       top.appendChild(createPlayerCell(data.player));
-      const rating = createLastRatingBlock(data.player, data.originalData);
-      if (rating) {
-        top.appendChild(rating);
-      }
+      top.appendChild(createPlayerActions(data));
       row.appendChild(top);
       [createFactsRow(info), createSkillsRow(data.skillRows)].forEach((section) => {
         if (section) {
@@ -822,6 +1076,61 @@
       list?.previousElementSibling?.dataset.omhWrapper === "true" ||
         list?.parentElement?.querySelector(":scope > .omh-list-wrapper[data-omh-wrapper='true']")
     );
+  }
+
+  function isSinglePlayerPage() {
+    return /\/Club\/Players\/(?:Youth)?Player\.aspx$/i.test(window.location.pathname);
+  }
+
+  function singlePlayerTagTarget() {
+    const mainBody = document.querySelector("#mainBody") || document.querySelector(".main .boxBody");
+    return (
+      mainBody?.querySelector(".playerName h1, .transferPlayerName h1, .transferPlayerName, .playerName, h1") ||
+      document.querySelector(".boxHead h2")
+    );
+  }
+
+  function enhanceSinglePlayerPage() {
+    if (!isSinglePlayerPage()) {
+      return false;
+    }
+    if (document.querySelector(".omh-single-tag[data-omh-enhanced='true']")) {
+      debugLog("single player tag skipped: already enhanced");
+      return false;
+    }
+
+    const key = currentPlayerStorageId();
+    if (!key) {
+      debugLog("single player tag skipped: player id not found");
+      return false;
+    }
+
+    const target = singlePlayerTagTarget();
+    if (!target) {
+      debugLog("single player tag skipped: target not found");
+      return false;
+    }
+
+    const wrapper = document.createElement("div");
+    wrapper.className = "omh-single-tag";
+    wrapper.dataset.omhEnhanced = "true";
+    wrapper.appendChild(createTagControlForKey(key));
+
+    if (/^h[1-6]$/i.test(target.tagName) || target.classList.contains("transferPlayerName")) {
+      target.appendChild(wrapper);
+    } else {
+      target.insertAdjacentElement("afterend", wrapper);
+    }
+
+    debugLog("single player tag enhanced", { key });
+    return true;
+  }
+
+  function enhanceCurrentPage() {
+    if (isSinglePlayerPage()) {
+      return enhanceSinglePlayerPage();
+    }
+    return enhanceAll();
   }
 
   function enhanceAll() {
@@ -901,7 +1210,9 @@
       hasList: Boolean(findPlayerList()),
       lists: playerLists().length,
       listDetails: playerListDebugInfo(),
-      players: document.querySelectorAll(PLAYER_SELECTOR).length
+      players: document.querySelectorAll(PLAYER_SELECTOR).length,
+      singlePlayerPage: isSinglePlayerPage(),
+      currentPlayerKey: currentPlayerStorageId()
     });
 
     let timer = 0;
@@ -921,9 +1232,11 @@
         return;
       }
       debugLog("attempt enhance", reason);
-      if (enhanceAll()) {
+      if (enhanceCurrentPage()) {
         enhanced = true;
-        observePlayerList();
+        if (!isSinglePlayerPage()) {
+          observePlayerList();
+        }
         disconnectDocumentObserver();
       }
     }
@@ -946,5 +1259,7 @@
     });
   }
 
-  start();
+  loadPlayerTags()
+    .catch((error) => debugLog("load tags failed", error))
+    .finally(start);
 })();

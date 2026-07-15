@@ -15,13 +15,44 @@
 }
 
 .omh-toolbar {
+  align-items: center;
   display: flex;
+  gap: 6px;
   justify-content: flex-end;
-  margin-bottom: 8px;
+  margin: 6px 0 10px;
 }
 
-.omh-export-button {
+.omh-toolbar-button {
+  background: #f6f6f6;
+  border: 1px solid #888;
+  border-radius: 3px;
+  color: #111;
   cursor: pointer;
+  font: inherit;
+  line-height: 1.2;
+  min-height: 26px;
+  padding: 4px 10px;
+}
+
+.omh-toolbar-button:hover {
+  background: #fff;
+  border-color: #666;
+}
+
+.omh-single-tag {
+  align-items: center;
+  display: inline-flex;
+  margin-left: 10px;
+  vertical-align: middle;
+}
+
+.omh-single-tag .omh-tag-select {
+  font-size: 14px;
+  height: 28px;
+  line-height: 1.2;
+  max-width: 112px;
+  min-width: 92px;
+  padding: 2px 8px;
 }
 
 .omh-player-row {
@@ -86,6 +117,18 @@
   line-height: 1.45;
 }
 
+.omh-player-actions {
+  align-items: flex-start;
+  display: inline-flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: flex-end;
+  justify-self: end;
+  line-height: 1.3;
+  max-width: 100%;
+}
+
 .omh-facts-row {
   background: #f7f8f5;
   border-left: 3px solid #c9d8c5;
@@ -109,7 +152,6 @@
   display: inline-flex;
   flex: 0 0 auto;
   gap: 8px;
-  justify-self: end;
   line-height: 1.3;
   margin-top: 0;
   width: auto;
@@ -126,6 +168,56 @@
   border-radius: 999px;
   font-weight: bold;
   padding: 2px 8px;
+}
+
+.omh-tag-select {
+  background: #f6f6f6;
+  border: 1px solid #b8b8b8;
+  border-radius: 3px;
+  color: #333;
+  cursor: pointer;
+  flex: 0 0 auto;
+  font: inherit;
+  font-weight: bold;
+  height: 26px;
+  max-width: 104px;
+  padding: 2px 4px;
+}
+
+.omh-tag-select:focus {
+  border-color: #2f6f3b;
+  outline: 1px solid #9fbfda;
+}
+
+.omh-tag-select[data-tag="Core"] {
+  background: #2f6f3b;
+  border-color: #2f6f3b;
+  color: #fff;
+}
+
+.omh-tag-select[data-tag="Develop"] {
+  background: #dce9f5;
+  border-color: #9fbfda;
+}
+
+.omh-tag-select[data-tag="Rotation"] {
+  background: #fff1bf;
+  border-color: #e1c75d;
+}
+
+.omh-tag-select[data-tag="Sell"] {
+  background: #f5d4ae;
+  border-color: #dfa667;
+}
+
+.omh-tag-select[data-tag="Watch"] {
+  background: #eeeeee;
+  border-color: #cfcfcf;
+}
+
+.omh-tag-select[data-tag="Frozen"] {
+  background: #e7e7f1;
+  border-color: #b8b8ca;
 }
 
 .omh-fact {
